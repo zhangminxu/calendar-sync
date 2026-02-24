@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Academic Calendar Sync - Upload Calendar Image</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Academic Calendar to Google Calendar</h1>
+            <p class="subtitle">Upload an academic calendar image to extract and sync all events</p>
+        </header>
+
+        <!-- Authentication Status -->
+        <div id="auth-section" class="section">
+            {% if is_authenticated %}
+            <div class="auth-status authenticated">
+                <span class="status-icon">&#10003;</span>
+                Connected to Google Calendar
+                <form action="/logout" method="post" style="display: inline;">
+                    <button type="submit" class="btn btn-small btn-secondary">Disconnect</button>
+                </form>
+            </div>
+            {% else %}
+            <div class="auth-status">
+                <p>Connect your Google Calendar to sync events</p>
+                <a href="/auth/google" class="btn btn-google">
+                    <svg class="google-icon" viewBox="0 0 24 24" width="18" height="18">
+                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                    </svg>
+                    Sign in with Google
+                </a>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Upload Section -->
+        <div id="upload-section" class="section">
+            <form id="upload-form" enctype="multipart/form-data">
+                <div class="upload-area" id="drop-zone">
+                    <input type="file" id="file-input" name="file" accept=".png,.jpg,.jpeg,.pdf" hidden>
+                    <div class="upload-content">
+                        <div class="upload-icon">&#128197;</div>
+                        <p>Drag & drop your academic calendar here</p>
+                        <p class="upload-hint">or click to browse</p>
+                        <p class="upload-formats">Supports PNG, JPEG, PDF</p>
+                    </div>
+                    <div id="file-preview" class="file-preview hidden">
+                        <span class="file-name"></span>
+                        <button type="button" class="btn-remove">&times;</button>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="academic_year_start">Academic Year Starting</label>
+                        <select id="academic_year_start" name="academic_year_start" required>
+                            {% for year in range(current_year - 2, current_year + 3) %}
+                            <option value="{{ year }}" {% if year == current_year %}selected{% endif %}>
+                                {{ year }}-{{ year + 1 }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <p class="form-hint">e.g., 2025-2026 means Aug 2025 - Jul 2026</p>
+                    </div>
+                    <div class="form-group">
+                        <label for="timezone">Timezone</label>
+                        <select id="timezone" name="timezone">
+                            <option value="America/Los_Angeles">Pacific Time (PT)</option>
+                            <option value="America/Denver">Mountain Time (MT)</option>
+                            <option value="America/Chicago">Central Time (CT)</option>
+                            <option value="America/New_York">Eastern Time (ET)</option>
+                            <option value="UTC">UTC</option>
+                            <option value="Europe/London">London (GMT/BST)</option>
+                            <option value="Europe/Paris">Paris (CET)</option>
+                            <option value="Asia/Tokyo">Tokyo (JST)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary" id="upload-btn" disabled>
+                    <span class="btn-text">Extract Events</span>
+                    <span class="btn-loading hidden">Processing... This may take a moment</span>
+                </button>
+            </form>
+        </div>
+
+        <!-- Results Section -->
+        <div id="results-section" class="section hidden">
+            <h2>Extracted Events <span id="event-count" class="event-count"></span></h2>
+
+            <!-- Filter Controls -->
+            <div id="filter-controls" class="filter-controls">
+                <div class="filter-row">
+                    <label class="select-all-label">
+                        <input type="checkbox" id="select-all-cb" checked>
+                        <span>Select All</span>
+                    </label>
+                    <select id="month-filter-select" class="month-filter-select">
+                        <option value="all">All Months</option>
+                    </select>
+                    <span class="selected-count" id="selected-count"></span>
+                </div>
+            </div>
+
+            <div id="events-list" class="events-list"></div>
+            <div class="actions">
+                <button type="button" class="btn btn-secondary" id="clear-btn">Clear</button>
+                <button type="button" class="btn btn-primary" id="sync-btn" {% if not is_authenticated %}disabled{% endif %}>
+                    <span class="btn-text">Sync Selected to Google Calendar</span>
+                    <span class="btn-loading hidden">Syncing...</span>
+                </button>
+            </div>
+            {% if not is_authenticated %}
+            <p class="hint">Connect to Google Calendar above to sync events</p>
+            {% endif %}
+        </div>
+
+        <!-- Error Section -->
+        <div id="error-section" class="section error-section hidden">
+            <p id="error-message"></p>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const filePreview = document.getElementById('file-preview');
+        const uploadForm = document.getElementById('upload-form');
+        const uploadBtn = document.getElementById('upload-btn');
+        const resultsSection = document.getElementById('results-section');
+        const eventsList = document.getElementById('events-list');
+        const eventCount = document.getElementById('event-count');
+        const syncBtn = document.getElementById('sync-btn');
+        const clearBtn = document.getElementById('clear-btn');
+        const errorSection = document.getElementById('error-section');
+        const errorMessage = document.getElementById('error-message');
+        const selectAllCb = document.getElementById('select-all-cb');
+        const monthFilterSelect = document.getElementById('month-filter-select');
+        const selectedCountEl = document.getElementById('selected-count');
+
+        // Store all events for filtering
+        let allEvents = [];
+
+        // File drag and drop
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                fileInput.files = files;
+                handleFileSelect(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileSelect(e.target.files[0]);
+            }
+        });
+
+        function handleFileSelect(file) {
+            const fileName = filePreview.querySelector('.file-name');
+            fileName.textContent = file.name;
+            filePreview.classList.remove('hidden');
+            dropZone.querySelector('.upload-content').classList.add('hidden');
+            uploadBtn.disabled = false;
+        }
+
+        filePreview.querySelector('.btn-remove').addEventListener('click', (e) => {
+            e.stopPropagation();
+            fileInput.value = '';
+            filePreview.classList.add('hidden');
+            dropZone.querySelector('.upload-content').classList.remove('hidden');
+            uploadBtn.disabled = true;
+        });
+
+        // Form submission
+        uploadForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const formData = new FormData(uploadForm);
+
+            uploadBtn.querySelector('.btn-text').classList.add('hidden');
+            uploadBtn.querySelector('.btn-loading').classList.remove('hidden');
+            uploadBtn.disabled = true;
+            hideError();
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.detail || 'Upload failed');
+                }
+
+                allEvents = data.events.map((ev, i) => ({ ...ev, _index: i, _selected: true }));
+                displayEvents(data.raw_text);
+            } catch (error) {
+                showError(error.message);
+            } finally {
+                uploadBtn.querySelector('.btn-text').classList.remove('hidden');
+                uploadBtn.querySelector('.btn-loading').classList.add('hidden');
+                uploadBtn.disabled = false;
+            }
+        });
+
+        function getMonthKey(dateStr) {
+            const d = new Date(dateStr + 'T00:00:00');
+            return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+        }
+
+        function buildMonthDropdown() {
+            const months = [];
+            const seen = new Set();
+            allEvents.forEach(ev => {
+                const key = getMonthKey(ev.date);
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    months.push(key);
+                }
+            });
+
+            const current = monthFilterSelect.value;
+            monthFilterSelect.innerHTML = '<option value="all">All Months</option>';
+            months.forEach(month => {
+                const count = allEvents.filter(ev => getMonthKey(ev.date) === month).length;
+                const opt = document.createElement('option');
+                opt.value = month;
+                opt.textContent = month + ' (' + count + ')';
+                monthFilterSelect.appendChild(opt);
+            });
+            // Restore selection if still valid
+            if ([...monthFilterSelect.options].some(o => o.value === current)) {
+                monthFilterSelect.value = current;
+            }
+        }
+
+        function getVisibleEvents() {
+            const filter = monthFilterSelect.value;
+            if (filter === 'all') return allEvents;
+            return allEvents.filter(ev => getMonthKey(ev.date) === filter);
+        }
+
+        function updateSelectAllCheckbox() {
+            const visible = getVisibleEvents();
+            const selectedCount = visible.filter(ev => ev._selected).length;
+            selectAllCb.checked = visible.length > 0 && selectedCount === visible.length;
+            selectAllCb.indeterminate = selectedCount > 0 && selectedCount < visible.length;
+        }
+
+        function updateSelectedCount() {
+            const count = allEvents.filter(ev => ev._selected).length;
+            selectedCountEl.textContent = count + ' of ' + allEvents.length + ' selected';
+            updateSelectAllCheckbox();
+            // Update sync button text
+            const btnText = syncBtn.querySelector('.btn-text');
+            if (count > 0) {
+                btnText.textContent = `Sync ${count} Selected Event${count === 1 ? '' : 's'} to Google Calendar`;
+            } else {
+                btnText.textContent = 'Sync Selected to Google Calendar';
+            }
+        }
+
+        function displayEvents(rawText) {
+            eventCount.textContent = `(${allEvents.length} found)`;
+
+            buildMonthDropdown();
+            renderEventList(rawText);
+            updateSelectedCount();
+
+            resultsSection.classList.remove('hidden');
+        }
+
+        function renderEventList(rawText) {
+            eventsList.innerHTML = '';
+
+            // Show raw OCR text for debugging
+            if (rawText) {
+                const debugSection = document.createElement('details');
+                debugSection.className = 'debug-section';
+                debugSection.innerHTML = `
+                    <summary>Show Raw OCR Text (for debugging)</summary>
+                    <pre class="raw-text">${escapeHtml(rawText)}</pre>
+                `;
+                eventsList.appendChild(debugSection);
+            }
+
+            const visible = getVisibleEvents();
+
+            if (visible.length === 0) {
+                eventsList.innerHTML += '<p class="no-events">No events found.</p>';
+                return;
+            }
+
+            // Group by month
+            const grouped = {};
+            visible.forEach(event => {
+                const monthKey = getMonthKey(event.date);
+                if (!grouped[monthKey]) grouped[monthKey] = [];
+                grouped[monthKey].push(event);
+            });
+
+            for (const [month, monthEvents] of Object.entries(grouped)) {
+                const monthHeader = document.createElement('div');
+                monthHeader.className = 'month-header';
+                monthHeader.textContent = month;
+                eventsList.appendChild(monthHeader);
+
+                monthEvents.forEach(event => {
+                    const eventEl = document.createElement('div');
+                    eventEl.className = 'event-item';
+
+                    const d = new Date(event.date + 'T00:00:00');
+                    const dateStr = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.checked = event._selected;
+                    checkbox.addEventListener('change', () => {
+                        event._selected = checkbox.checked;
+                        updateSelectedCount();
+                    });
+
+                    const checkboxDiv = document.createElement('div');
+                    checkboxDiv.className = 'event-checkbox';
+                    checkboxDiv.appendChild(checkbox);
+
+                    const detailsDiv = document.createElement('div');
+                    detailsDiv.className = 'event-details';
+                    detailsDiv.innerHTML = `
+                        <div class="event-title">${escapeHtml(event.title)}</div>
+                        <div class="event-meta">
+                            <span class="event-date">${dateStr}</span>
+                        </div>
+                    `;
+
+                    eventEl.appendChild(checkboxDiv);
+                    eventEl.appendChild(detailsDiv);
+                    eventsList.appendChild(eventEl);
+                });
+            }
+        }
+
+        // Select All checkbox - toggles visible (filtered) events
+        selectAllCb.addEventListener('change', () => {
+            const checked = selectAllCb.checked;
+            getVisibleEvents().forEach(ev => { ev._selected = checked; });
+            renderEventList();
+            updateSelectedCount();
+        });
+
+        // Month filter dropdown - selecting a specific month deselects all others
+        monthFilterSelect.addEventListener('change', () => {
+            const filter = monthFilterSelect.value;
+            if (filter !== 'all') {
+                allEvents.forEach(ev => {
+                    ev._selected = getMonthKey(ev.date) === filter;
+                });
+            }
+            renderEventList();
+            updateSelectedCount();
+        });
+
+        // Sync only selected events
+        syncBtn.addEventListener('click', async () => {
+            const selectedEvents = allEvents.filter(ev => ev._selected);
+
+            if (selectedEvents.length === 0) {
+                showError('No events selected. Please select at least one event to sync.');
+                return;
+            }
+
+            syncBtn.querySelector('.btn-text').classList.add('hidden');
+            syncBtn.querySelector('.btn-loading').classList.remove('hidden');
+            syncBtn.disabled = true;
+            hideError();
+
+            try {
+                // Update session with only selected events
+                const response = await fetch('/sync-selected', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ events: selectedEvents })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.detail || 'Sync failed');
+                }
+
+                window.location.href = `/success?synced=${data.synced}`;
+            } catch (error) {
+                showError(error.message);
+            } finally {
+                syncBtn.querySelector('.btn-text').classList.remove('hidden');
+                syncBtn.querySelector('.btn-loading').classList.add('hidden');
+                syncBtn.disabled = false;
+            }
+        });
+
+        // Clear results
+        clearBtn.addEventListener('click', () => {
+            resultsSection.classList.add('hidden');
+            eventsList.innerHTML = '';
+            allEvents = [];
+        });
+
+        // Error handling
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorSection.classList.remove('hidden');
+        }
+
+        function hideError() {
+            errorSection.classList.add('hidden');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Check for auth success
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('authenticated') === 'true') {
+            window.history.replaceState({}, '', '/');
+        }
+    </script>
+</body>
+</html>

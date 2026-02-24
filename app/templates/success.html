@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Success - Calendar Sync</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <div class="success-page">
+            <div class="success-icon">&#10003;</div>
+            <h1>Events Synced Successfully!</h1>
+            <p class="success-count">{{ synced_count }} event{% if synced_count != 1 %}s{% endif %} added to your Google Calendar</p>
+
+            <div class="success-actions">
+                <a href="https://calendar.google.com" target="_blank" class="btn btn-primary">
+                    Open Google Calendar
+                </a>
+                <a href="/" class="btn btn-secondary">
+                    Upload Another Calendar
+                </a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
