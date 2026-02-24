@@ -15,13 +15,17 @@ except ImportError:
 class EasyOCRService:
     """Text extraction using EasyOCR - handles colored backgrounds well."""
 
+    _shared_reader = None
+
     def __init__(self, languages: Optional[List[str]] = None):
         if not EASYOCR_AVAILABLE:
             raise ImportError("easyocr is required. Install with: pip install easyocr")
 
         self.languages = languages or ['en']
-        # Initialize reader (downloads model on first use)
-        self.reader = easyocr.Reader(self.languages, gpu=False)
+        # Reuse a single reader instance across requests
+        if EasyOCRService._shared_reader is None:
+            EasyOCRService._shared_reader = easyocr.Reader(self.languages, gpu=False)
+        self.reader = EasyOCRService._shared_reader
 
     def extract_text(self, image: np.ndarray) -> str:
         """

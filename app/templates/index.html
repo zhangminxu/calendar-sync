@@ -209,11 +209,18 @@
                     body: formData
                 });
 
-                const data = await response.json();
-
                 if (!response.ok) {
-                    throw new Error(data.detail || 'Upload failed');
+                    const text = await response.text();
+                    try {
+                        const err = JSON.parse(text);
+                        throw new Error(err.detail || 'Upload failed');
+                    } catch (e) {
+                        if (e.message && e.message !== 'Upload failed') throw e;
+                        throw new Error('Server timed out. Please try again — it may need a moment to warm up.');
+                    }
                 }
+
+                const data = await response.json();
 
                 allEvents = data.events.map((ev, i) => ({ ...ev, _index: i, _selected: true }));
                 displayEvents(data.raw_text);
