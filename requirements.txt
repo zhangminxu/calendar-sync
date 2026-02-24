@@ -15,6 +15,7 @@ google-auth-oauthlib>=1.0.0
 google-api-python-client>=2.100.0
 
 anthropic>=0.39.0
+easyocr>=1.7.0
 
 python-dateutil>=2.8.2
 python-dotenv>=1.0.0
