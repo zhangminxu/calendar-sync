@@ -10,6 +10,14 @@ from app.config import settings
 # Create upload directory
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 
+# Preload EasyOCR at startup so it doesn't timeout during requests
+try:
+    from app.services.easyocr_service import EasyOCRService
+    _ocr = EasyOCRService()
+    print("EasyOCR preloaded successfully")
+except Exception as e:
+    print(f"EasyOCR preload failed: {e}")
+
 # Initialize FastAPI app
 app = FastAPI(
     title="Calendar Image to Google Calendar Sync",
